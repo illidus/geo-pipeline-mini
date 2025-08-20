@@ -1,0 +1,28 @@
+{
+  "model_performance": {
+    "soil_som": {
+      "r2_score": -0.0015548368246625088,
+      "model_type": "Ridge"
+    },
+    "soil_clay": {
+      "r2_score": 0.9942461813954988,
+      "model_type": "RandomForest"
+    },
+    "soil_ph": {
+      "r2_score": 0.14644087992678112,
+      "model_type": "Ridge"
+    }
+  },
+  "processing_times": {
+    "data_generation": 0.0951378345489502,
+    "data_cleaning": 0.1571331024169922,
+    "feature_engineering": 11.51334285736084,
+    "modeling": 64.87684535980225,
+    "export": 0.043386220932006836
+  },
+  "data_summary": {
+    "height": 500,
+    "width": 500,
+    "total_pixels": 250000
+  }
+}

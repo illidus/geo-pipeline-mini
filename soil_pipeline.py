@@ -7,7 +7,7 @@ import pandas as pd
 import rasterio
 from rasterio.windows import Window
 from rasterio.transform import from_bounds
-import geopandas as gpd
+# import geopandas as gpd  # Not used in this implementation
 from pathlib import Path
 import time
 import json
@@ -18,7 +18,7 @@ from sklearn.linear_model import Ridge
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 import matplotlib.pyplot as plt
-import seaborn as sns
+# import seaborn as sns  # Not used in this implementation
 
 
 @dataclass
@@ -390,6 +390,155 @@ class SoilPipeline:
         print(f"Exported GeoTIFF in {self.benchmarks['export']:.2f} seconds")
         return str(output_path)
     
+    def export_predictions_csv(self) -> str:
+        """Export predictions and actual values as CSV for analysis."""
+        print("Creating predictions CSV...")
+        
+        # Create outputs directory
+        outputs_dir = Path("outputs")
+        outputs_dir.mkdir(exist_ok=True)
+        
+        # Sample a subset of pixels for CSV (avoid huge files)
+        height, width = self.features['SOM'].shape
+        sample_size = min(1000, height * width)  # Sample up to 1000 pixels
+        
+        # Create sampling indices
+        np.random.seed(42)
+        pixel_indices = np.random.choice(height * width, size=sample_size, replace=False)
+        rows, cols = np.unravel_index(pixel_indices, (height, width))
+        
+        # Get coordinates using transform
+        transform = self.features['transform']
+        x_coords = []
+        y_coords = []
+        for row, col in zip(rows, cols):
+            x, y = rasterio.transform.xy(transform, row, col)
+            x_coords.append(x)
+            y_coords.append(y)
+        
+        # Create predictions DataFrame
+        predictions_data = {
+            'x': x_coords,
+            'y': y_coords,
+        }
+        
+        # Add actual and predicted values for each soil property
+        for prop_name in ['SOM', 'Clay', 'pH']:
+            # Get actual values (targets used for training)
+            actual_key = f'{prop_name.lower()}_target' if prop_name != 'SOM' else 'som_target'
+            if actual_key in self.features:
+                actual_values = self.features[actual_key].flatten()[pixel_indices]
+                predictions_data[f'soil_{prop_name.lower()}_actual'] = actual_values
+            
+            # Get predicted values
+            predicted_values = self.features[prop_name].flatten()[pixel_indices]
+            predictions_data[f'soil_{prop_name.lower()}_predicted'] = predicted_values
+        
+        # Create DataFrame and save
+        predictions_df = pd.DataFrame(predictions_data)
+        csv_path = outputs_dir / "predictions.csv"
+        predictions_df.to_csv(csv_path, index=False)
+        
+        print(f"Saved predictions CSV: {csv_path}")
+        return str(csv_path)
+    
+    def export_metrics_json(self) -> str:
+        """Export model performance metrics as JSON."""
+        print("Creating metrics JSON...")
+        
+        # Create outputs directory
+        outputs_dir = Path("outputs")
+        outputs_dir.mkdir(exist_ok=True)
+        
+        # Prepare metrics in expected format
+        metrics = {
+            "model_performance": {},
+            "processing_times": self.benchmarks,
+            "data_summary": {
+                "height": self.features['SOM'].shape[0],
+                "width": self.features['SOM'].shape[1], 
+                "total_pixels": self.features['SOM'].size
+            }
+        }
+        
+        # Add model performance for each soil property
+        for prop_name, model_info in self.models.items():
+            metrics["model_performance"][f"soil_{prop_name.lower()}"] = {
+                "r2_score": model_info['r2_score'],
+                "model_type": model_info['type']
+            }
+        
+        # Save metrics
+        metrics_path = outputs_dir / "metrics.json"
+        with open(metrics_path, 'w') as f:
+            json.dump(metrics, f, indent=2)
+        
+        print(f"Saved metrics JSON: {metrics_path}")
+        return str(metrics_path)
+    
+    def create_results_visualization(self) -> str:
+        """Create results visualization and save as PNG."""
+        print("Creating results visualization...")
+        
+        # Create assets directory
+        assets_dir = Path("assets")
+        assets_dir.mkdir(exist_ok=True)
+        
+        # Create a 2x2 subplot figure
+        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+        fig.suptitle('Geo Pipeline Mini - Soil Property Results', fontsize=16, fontweight='bold')
+        
+        # Plot 1: SOM (Soil Organic Matter) map
+        ax1 = axes[0, 0]
+        im1 = ax1.imshow(self.features['SOM'], cmap='viridis', aspect='equal')
+        ax1.set_title('Soil Organic Matter (%)')
+        ax1.set_xlabel('X (pixels)')
+        ax1.set_ylabel('Y (pixels)')
+        plt.colorbar(im1, ax=ax1, shrink=0.8)
+        
+        # Plot 2: Clay content map
+        ax2 = axes[0, 1]
+        im2 = ax2.imshow(self.features['Clay'], cmap='YlOrBr', aspect='equal')
+        ax2.set_title('Clay Content (%)')
+        ax2.set_xlabel('X (pixels)')
+        ax2.set_ylabel('Y (pixels)')
+        plt.colorbar(im2, ax=ax2, shrink=0.8)
+        
+        # Plot 3: pH map
+        ax3 = axes[1, 0]
+        im3 = ax3.imshow(self.features['pH'], cmap='RdYlBu_r', aspect='equal')
+        ax3.set_title('Soil pH')
+        ax3.set_xlabel('X (pixels)')
+        ax3.set_ylabel('Y (pixels)')
+        plt.colorbar(im3, ax=ax3, shrink=0.8)
+        
+        # Plot 4: Model performance comparison
+        ax4 = axes[1, 1]
+        properties = list(self.models.keys())
+        r2_scores = [self.models[prop]['r2_score'] for prop in properties]
+        model_types = [self.models[prop]['type'] for prop in properties]
+        
+        bars = ax4.bar(properties, r2_scores, color=['green', 'orange', 'blue'])
+        ax4.set_title('Model Performance (R² Score)')
+        ax4.set_ylabel('R² Score')
+        ax4.set_ylim([0, 1])
+        
+        # Add value labels and model types
+        for i, (bar, r2, model_type) in enumerate(zip(bars, r2_scores, model_types)):
+            height = bar.get_height()
+            ax4.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                    f'{r2:.3f}\n({model_type})', ha='center', va='bottom', fontsize=9)
+        
+        plt.tight_layout()
+        
+        # Save the figure
+        results_path = assets_dir / "results.png"
+        plt.savefig(results_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Saved results visualization: {results_path}")
+        return str(results_path)
+
     def run_pipeline(self) -> Dict[str, any]:
         """Run the complete pipeline."""
         print("🌍 Geo Pipeline Mini - Soil Property Analysis")
@@ -404,6 +553,11 @@ class SoilPipeline:
         soil_indices = self.create_soil_indices()
         geotiff_path = self.export_geotiff()
         
+        # Export outputs as claimed in README
+        predictions_csv = self.export_predictions_csv()
+        metrics_json = self.export_metrics_json()
+        results_png = self.create_results_visualization()
+        
         total_time = time.time() - pipeline_start
         self.benchmarks['total_pipeline'] = total_time
         
@@ -411,6 +565,9 @@ class SoilPipeline:
         summary = {
             'pipeline_status': 'completed',
             'output_geotiff': geotiff_path,
+            'predictions_csv': predictions_csv,
+            'metrics_json': metrics_json,
+            'results_png': results_png,
             'soil_indices': list(soil_indices.keys()),
             'model_performance': {name: info['r2_score'] for name, info in self.models.items()},
             'benchmarks': self.benchmarks,
@@ -431,6 +588,9 @@ class SoilPipeline:
         print(f"Total processing time: {total_time:.2f} seconds")
         print(f"Data dimensions: {summary['data_dimensions']['height']}x{summary['data_dimensions']['width']} pixels")
         print(f"Output GeoTIFF: {geotiff_path}")
+        print(f"Predictions CSV: {predictions_csv}")
+        print(f"Metrics JSON: {metrics_json}")
+        print(f"Results PNG: {results_png}")
         
         print(f"\nModel Performance (R² scores):")
         for prop, r2 in summary['model_performance'].items():
