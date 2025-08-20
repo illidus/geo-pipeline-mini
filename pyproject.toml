@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geo-pipeline-mini"
+version = "1.0.0"
+description = "Transform gamma + satellite data into soil property indices with ML models"
+authors = [{name = "Demo Author", email = "demo@example.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24.0,<1.26.0",
+    "pandas>=2.0.0,<2.2.0",
+    "scikit-learn>=1.3.0,<1.4.0",
+    "matplotlib>=3.7.0,<3.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0,<8.0.0",
+    "black>=23.0.0",
+    "ruff>=0.0.280",
+]
+
+[project.scripts]
+geo-pipeline = "src.pipeline.soil_pipeline:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+select = ["E", "F", "W", "C90", "I", "N", "UP", "S", "B", "A", "COM", "DTZ", "EM", "EXE", "ICN", "PIE", "PYI", "Q", "RSE", "RET", "SIM", "TID", "ARG", "ERA", "PGH", "PL", "TRY", "NPY", "RUF"]
+ignore = ["S101", "PLR0913", "PLR0915"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --tb=short"
