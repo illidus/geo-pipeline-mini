@@ -86,7 +86,7 @@ python -m src.pipeline.soil_pipeline run_pipeline --data data/demo --out outputs
   Predictions saved: outputs/predictions.csv
   Metrics saved: outputs/metrics.json
 
-✅ Pipeline completed in 0.03s
+✅ Pipeline completed in 0.04s
 📊 Average R² score: 0.353
 📁 Results saved to: outputs
 ```
